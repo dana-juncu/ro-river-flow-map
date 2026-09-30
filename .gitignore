@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+hr/
+ro_rivers_raw.json
+names.json
+osm_*.json

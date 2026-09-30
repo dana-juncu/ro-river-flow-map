@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ape curgătoare · River Flow Romania</title>
+<meta name="description" content="Every river reach in Romania as a flowing, animated map — sized by discharge, from Carpathian headwaters to the Danube.">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+:root{
+  --bg:#050b14; --panel:rgba(9,17,29,.88); --panel-b:rgba(120,170,220,.16);
+  --ink:#eaf3fc; --mute:#8fa5bd; --accent:#63c7ff; --accent2:#2f7ee0; --warn:#ffcc55;
+  --r:18px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+#map{position:absolute;inset:0}
+#flow{position:absolute;inset:0;pointer-events:none;z-index:2}
+.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{z-index:5}
+.card{background:var(--panel);border:1px solid var(--panel-b);border-radius:var(--r);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 40px rgba(0,0,0,.45)}
+#head{position:absolute;z-index:6;top:14px;left:14px;padding:14px 18px 12px;max-width:min(430px,calc(100vw - 28px))}
+#head .kick{font-size:11px;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;display:flex;align-items:center;gap:8px}
+#head .dot{width:8px;height:8px;border-radius:50%;background:#3ddc84;box-shadow:0 0 8px #3ddc84}
+#head h1{margin:2px 0 8px;font-size:26px;font-weight:700;letter-spacing:-.01em}
+#head h1 span{color:var(--accent)}
+.chip{display:inline-block;line-height:1.35;font-size:12px;color:var(--mute);
+  border:1px solid var(--panel-b);border-radius:99px;padding:5px 12px;background:rgba(255,255,255,.03)}
+.chip b{color:var(--ink)}
+#lang{position:absolute;z-index:6;top:14px;right:56px;display:flex;border-radius:99px;overflow:hidden}
+#lang button{all:unset;cursor:pointer;padding:7px 12px;font-size:12px;font-weight:600;color:var(--mute)}
+#lang button.on{background:var(--accent2);color:#fff}
+#panel{position:absolute;z-index:6;left:14px;bottom:14px;width:min(430px,calc(100vw - 28px));max-height:calc(100% - 150px);overflow:auto}
+#panel header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--panel-b)}
+#panel header small{display:block;font-size:11px;letter-spacing:.14em;color:var(--mute);text-transform:uppercase}
+#panel header strong{font-size:17px}
+#tog{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;text-align:center;line-height:36px;font-size:20px;
+  background:rgba(99,199,255,.1);border:1px solid var(--panel-b);color:var(--accent)}
+#body.hide{display:none}
+.row2{display:grid;grid-template-columns:1fr 1fr}
+.cell{padding:12px 18px;border-bottom:1px solid var(--panel-b)}
+.cell + .cell{border-left:1px solid var(--panel-b)}
+.lbl{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:8px}
+.lbl em{font-style:normal;letter-spacing:0;text-transform:none;color:var(--accent);background:rgba(99,199,255,.12);border-radius:99px;padding:2px 9px;font-size:12px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.layers{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:12px 18px;border-bottom:1px solid var(--panel-b)}
+.layers .t{grid-column:1/-1}
+.lay{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.sw{position:relative;width:38px;height:22px;border-radius:99px;background:#26364b;flex:none;cursor:pointer;border:0}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#9db2c8;transition:.15s}
+.sw.on{background:var(--accent2)} .sw.on::after{left:19px;background:#fff}
+.sw[disabled]{opacity:.35;cursor:not-allowed}
+#q{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--panel-b);background:rgba(255,255,255,.04);color:var(--ink);font-size:14px}
+#q:focus{outline:2px solid var(--accent2);outline-offset:0}
+#res{margin-top:6px;display:flex;flex-direction:column}
+#res button{all:unset;cursor:pointer;padding:7px 10px;border-radius:8px;font-size:13px;display:flex;justify-content:space-between}
+#res button:hover,#res button:focus-visible{background:rgba(99,199,255,.12)}
+#res span{color:var(--mute);font-size:12px}
+#about{padding:12px 18px 16px;font-size:12px;color:var(--mute)}
+#about summary{cursor:pointer;letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+#about p{margin:8px 0 0}
+#about a{color:var(--accent)}
+#tip{position:absolute;z-index:7;pointer-events:none;padding:9px 12px;border-radius:12px;font-size:12px;min-width:150px;display:none}
+#tip .k{color:var(--warn);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+#tip .n{font-size:15px;font-weight:600;margin:1px 0 2px}
+#tip .s{color:var(--mute)} #tip .s b{color:var(--ink);font-weight:600}
+.legend{position:absolute;z-index:5;right:14px;bottom:34px;padding:10px 14px;font-size:11px;color:var(--mute);width:190px}
+.legend .bar{height:8px;border-radius:6px;margin:6px 0 4px;background:linear-gradient(90deg,#16407a,#2a6fd6,#43a4ff,#8fd3ff,#f2fbff)}
+.legend .tick{display:flex;justify-content:space-between}
+@media (max-width:640px){
+  #head{top:10px;left:10px;right:10px;max-width:none;padding:10px 14px}
+  #head h1{font-size:21px;margin-bottom:6px}
+  #lang{top:16px;right:16px}
+  .maplibregl-ctrl-top-right{display:none}
+  #head{padding-right:104px}
+  #head .chip{font-size:11px;padding:4px 10px}
+  #panel{left:10px;right:10px;bottom:10px;width:auto;max-height:52%}
+  .legend{display:none}
+}
+.maplibregl-ctrl-attrib{background:rgba(5,11,20,.7)!important;color:#8fa5bd!important}
+.maplibregl-ctrl-attrib a{color:#8fa5bd!important}
+@media (prefers-reduced-motion:reduce){ #flow{opacity:.0} }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<canvas id="flow"></canvas>
+
+<div id="head" class="card">
+  <div class="kick"><span class="dot"></span><span id="t-kick">Flowing rivers</span></div>
+  <h1><span id="t-h1a">River Flow</span> <span style="color:var(--ink)" id="t-h1b">Romania</span></h1>
+  <div class="chip" id="stats">loading…</div>
+</div>
+<div id="lang" class="card"><button id="l-en" class="on">EN</button><button id="l-ro">RO</button></div>
+
+<div id="panel" class="card">
+  <header>
+    <div><small id="t-mc">Map controls</small><strong id="t-explore">Explore the rivers</strong></div>
+    <button id="tog" aria-label="Toggle controls" aria-expanded="true">−</button>
+  </header>
+  <div id="body">
+    <div class="row2">
+      <div class="cell"><div class="lbl"><span id="t-speed">Flow speed</span><em id="v-speed">1.0×</em></div>
+        <input id="speed" type="range" min="0" max="3" step="0.1" value="1" aria-label="Flow speed"></div>
+      <div class="cell"><div class="lbl"><span id="t-from">Show from</span><em id="v-from">all</em></div>
+        <input id="from" type="range" min="0" max="4" step="1" value="0" aria-label="Minimum river size"></div>
+    </div>
+    <div class="layers">
+      <div class="lbl t" style="margin:0"><span id="t-layers">Map layers</span></div>
+      <label class="lay"><span id="t-anim">Flow animation</span><button class="sw on" id="sw-anim" role="switch" aria-checked="true"></button></label>
+      <label class="lay"><span id="t-names">River names</span><button class="sw on" id="sw-names" role="switch" aria-checked="true"></button></label>
+      <label class="lay"><span id="t-relief">Terrain relief</span><button class="sw on" id="sw-relief" role="switch" aria-checked="true"></button></label>
+      <label class="lay"><span id="t-vs">Flow vs 30-day mean</span><button class="sw" id="sw-vs" role="switch" aria-checked="false" disabled></button></label>
+    </div>
+    <div class="cell" style="border-left:0"><div class="lbl"><span id="t-search">Search the map</span></div>
+      <input id="q" type="search" autocomplete="off" placeholder="River name…" aria-label="Search rivers">
+      <div id="res"></div></div>
+    <details id="about"><summary id="t-about">About the data</summary>
+      <p id="t-about-p"></p></details>
+  </div>
+</div>
+
+<div class="legend card" id="legend">
+  <div id="t-leg">Discharge (m³/s)</div>
+  <div class="bar" id="legbar"></div>
+  <div class="tick"><span>0.1</span><span>10</span><span>1 000</span><span>6 000+</span></div>
+</div>
+<div id="tip" class="card"></div>
+
+<script src="lib/maplibre-gl.js"></script>
+<script>
+"use strict";
+/* ---------- i18n ---------- */
+const I18N={
+ en:{kick:"Flowing rivers",mc:"Map controls",explore:"Explore the rivers",speed:"Flow speed",from:"Show from",layers:"Map layers",
+  anim:"Flow animation",names:"River names",relief:"Terrain relief",vs:"Flow vs 30-day mean",search:"Search the map",ph:"River name…",about:"About the data",
+  leg:"Discharge (m³/s)",all:"all",reaches:"river reaches",named:"on named rivers",mode_avg:"long-term average flow",mode_live:"modelled flow",
+  river:"River",lake:"Lake / reservoir",area:"surface area",reach:"River reach",avg:"long-term average",now:"modelled today",upl:"upstream area",len:"length",of:"of 30-day mean",
+  noresults:"No matching river",about_p:"Every line is a river reach from <a href='https://www.hydrosheds.org/products/hydrorivers' target='_blank' rel='noopener'>HydroRIVERS</a> (HydroSHEDS, ~500 m network, reaches draining ≥10 km²). Width and colour show average discharge; dots move in the direction of flow at a speed that grows with discharge — a visual cue, not a measured velocity. Discharge is modelled (HydroATLAS long-term averages; daily values from GloFAS via <a href='https://open-meteo.com/en/docs/flood-api' target='_blank' rel='noopener'>Open-Meteo</a> when available), not gauge readings. River and lake names, lake outlines: © OpenStreetMap contributors (rivers without a name have none in OSM or are too small to match); country border: Natural Earth; relief: Mapzen/AWS terrain tiles."},
+ ro:{kick:"Râuri în mișcare",mc:"Controale hartă",explore:"Explorează râurile",speed:"Viteza curgerii",from:"Arată de la",layers:"Straturi",
+  anim:"Animația curgerii",names:"Nume râuri",relief:"Relief",vs:"Debit vs media 30 zile",search:"Caută pe hartă",ph:"Numele râului…",about:"Despre date",
+  leg:"Debit (m³/s)",all:"toate",reaches:"tronsoane de râu",named:"pe râuri denumite",mode_avg:"debit mediu multianual",mode_live:"debit modelat",
+  river:"Râu",lake:"Lac / acumulare",area:"suprafață",reach:"Tronson de râu",avg:"medie multianuală",now:"modelat azi",upl:"bazin drenat",len:"lungime",of:"din media pe 30 de zile",
+  noresults:"Niciun râu găsit",about_p:"Fiecare linie este un tronson de râu din <a href='https://www.hydrosheds.org/products/hydrorivers' target='_blank' rel='noopener'>HydroRIVERS</a> (HydroSHEDS, rețea la ~500 m, tronsoane cu bazin ≥10 km²). Grosimea și culoarea arată debitul mediu; punctele se deplasează în sensul curgerii, cu o viteză ce crește odată cu debitul — un efect vizual, nu o viteză măsurată. Debitele sunt modelate (medii multianuale HydroATLAS; valori zilnice GloFAS prin <a href='https://open-meteo.com/en/docs/flood-api' target='_blank' rel='noopener'>Open-Meteo</a>, când sunt disponibile), nu măsurători de la stații hidrometrice. Numele râurilor și lacurilor, contururile lacurilor: © contribuitorii OpenStreetMap (râurile fără nume nu au nume în OSM sau sunt prea mici pentru a fi asociate); frontieră: Natural Earth; relief: Mapzen/AWS terrain tiles."}
+};
+let LANG=(navigator.language||"en").toLowerCase().startsWith("ro")?"ro":"en";
+const $=id=>document.getElementById(id);
+const t=k=>I18N[LANG][k];
+
+/* ---------- state ---------- */
+const HLF=n=>["case",["has","g"],["==",["get","g"],n],["==",["get","n"],n]];
+const S={anim:true,names:true,relief:true,vs:false,speed:1,from:0,zoom:6,live:null,fc:null,reach:[],byName:new Map(),hoverName:null};
+const FROM_STEPS=[0,50,200,1000,5000]; // upstream area thresholds (km²)
+const FROM_LABEL=()=>[t("all"),"≥ 50 km²","≥ 200 km²","≥ 1 000 km²","≥ 5 000 km²"];
+
+/* ---------- map ---------- */
+const CITIES={"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"n": "București"}, "geometry": {"type": "Point", "coordinates": [26.1, 44.43]}}, {"type": "Feature", "properties": {"n": "Cluj-Napoca"}, "geometry": {"type": "Point", "coordinates": [23.59, 46.77]}}, {"type": "Feature", "properties": {"n": "Timișoara"}, "geometry": {"type": "Point", "coordinates": [21.23, 45.75]}}, {"type": "Feature", "properties": {"n": "Iași"}, "geometry": {"type": "Point", "coordinates": [27.59, 47.16]}}, {"type": "Feature", "properties": {"n": "Constanța"}, "geometry": {"type": "Point", "coordinates": [28.65, 44.18]}}, {"type": "Feature", "properties": {"n": "Brașov"}, "geometry": {"type": "Point", "coordinates": [25.59, 45.65]}}, {"type": "Feature", "properties": {"n": "Craiova"}, "geometry": {"type": "Point", "coordinates": [23.8, 44.32]}}, {"type": "Feature", "properties": {"n": "Galați"}, "geometry": {"type": "Point", "coordinates": [28.05, 45.44]}}, {"type": "Feature", "properties": {"n": "Oradea"}, "geometry": {"type": "Point", "coordinates": [21.92, 47.05]}}, {"type": "Feature", "properties": {"n": "Sibiu"}, "geometry": {"type": "Point", "coordinates": [24.15, 45.8]}}, {"type": "Feature", "properties": {"n": "Ploiești"}, "geometry": {"type": "Point", "coordinates": [26.03, 44.94]}}, {"type": "Feature", "properties": {"n": "Suceava"}, "geometry": {"type": "Point", "coordinates": [26.25, 47.65]}}, {"type": "Feature", "properties": {"n": "Deva"}, "geometry": {"type": "Point", "coordinates": [22.9, 45.88]}}, {"type": "Feature", "properties": {"n": "Târgu Mureș"}, "geometry": {"type": "Point", "coordinates": [24.56, 46.54]}}, {"type": "Feature", "properties": {"n": "Baia Mare"}, "geometry": {"type": "Point", "coordinates": [23.58, 47.66]}}, {"type": "Feature", "properties": {"n": "Drobeta-Turnu Severin"}, "geometry": {"type": "Point", "coordinates": [22.66, 44.63]}}, {"type": "Feature", "properties": {"n": "Tulcea"}, "geometry": {"type": "Point", "coordinates": [28.8, 45.18]}}]};
+const RO_BOUNDS=[[20.1,43.55],[29.9,48.35]];
+const map=new maplibregl.Map({
+  container:"map",
+  style:{version:8,
+    glyphs:"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    sources:{
+      ro:{type:"geojson",data:"data/romania.geojson"},
+      cities:{type:"geojson",data:CITIES},
+      lakes:{type:"geojson",data:"data/lakes.geojson"},
+      dem:{type:"raster-dem",tiles:["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],tileSize:256,encoding:"terrarium",maxzoom:12,
+        attribution:"Terrain: Mapzen/AWS · Borders: Natural Earth · Rivers: HydroRIVERS · River names: © OpenStreetMap contributors · Flow: GloFAS/Open-Meteo"}
+    },
+    layers:[
+      {id:"bg",type:"background",paint:{"background-color":"#070f1b"}},
+      {id:"land",type:"fill",source:"ro",paint:{"fill-color":"#0d1a2c","fill-opacity":.9}},
+      {id:"relief",type:"hillshade",source:"dem",paint:{"hillshade-shadow-color":"#000814","hillshade-highlight-color":"#33507a","hillshade-accent-color":"#0b1a30","hillshade-exaggeration":.55,"hillshade-illumination-direction":315}},
+      {id:"lakes-fill",type:"fill",source:"lakes",paint:{"fill-color":"#153a6b","fill-opacity":.95}},
+      {id:"lakes-line",type:"line",source:"lakes",paint:{"line-color":"#5b93d6","line-width":.9,"line-opacity":.8}},
+      {id:"border-glow",type:"line",source:"ro",paint:{"line-color":"#4b7fc4","line-width":5,"line-blur":5,"line-opacity":.35}},
+      {id:"border",type:"line",source:"ro",paint:{"line-color":"#7fa6de","line-width":1,"line-opacity":.8}}
+    ]},
+  bounds:RO_BOUNDS, fitBoundsOptions:{padding:(innerWidth<700?{top:150,bottom:110,left:12,right:12}:{top:90,bottom:60,left:40,right:40})},
+  minZoom:(innerWidth<700?3.6:5), maxZoom:13, maxBounds:(innerWidth<700?[[8,36],[42,56]]:[[15.5,41.0],[34.5,50.5]]),
+  dragRotate:false, pitchWithRotate:false, attributionControl:{compact:true}
+});
+map.touchZoomRotate.disableRotation();
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
+
+const QCOLOR=["interpolate",["linear"],["log10",["+",["get","q"],.01]],
+  -1.5,"#16407a",-.5,"#2a6fd6",0.7,"#43a4ff",1.7,"#8fd3ff",2.7,"#dff4ff",3.8,"#ffffff"];
+const RCOLOR=["interpolate",["linear"],["get","r"],0,"#d24b3a",.5,"#e59a52",.9,"#a9b6c6",1.3,"#5fb4ff",2.5,"#2f6fff"];
+const WIDTH=z=>["interpolate",["linear"],["zoom"],5,z[0],8,z[1],12,z[2]];
+const lineW=["interpolate",["linear"],["log10",["+",["get","q"],.05]],-1,.35,0,.7,1,1.15,2,1.7,3.5,2.3];
+
+function effMinUp(){
+  const z=map.getZoom();
+  const zoomMin = z<5.6?2000 : z<6.4?600 : z<7.2?150 : z<8?40 : 0;
+  return Math.max(zoomMin,FROM_STEPS[S.from]);
+}
+function applyFilters(){
+  const m=effMinUp(), f=[">=",["get","u"],m];
+  for(const id of["riv","riv-glow","hit"]) if(map.getLayer(id)) map.setFilter(id,f);
+  if(map.getLayer("names")) map.setFilter("names",["all",["has","n"],f]);
+}
+
+let started=false;
+function start(){
+  if(started) return; started=true;
+  map.addLayer({id:"cities-dot",type:"circle",source:"cities",paint:{"circle-radius":2,"circle-color":"#9fb4d0","circle-opacity":.7}});
+  map.addLayer({id:"cities",type:"symbol",source:"cities",layout:{"text-field":["get","n"],"text-font":["Open Sans Regular","Arial Unicode MS Regular"],"text-size":11,"text-anchor":"top","text-offset":[0,.5]},paint:{"text-color":"#9fb4d0","text-halo-color":"#070f1b","text-halo-width":1.4,"text-opacity":.85}});
+  map.addLayer({id:"lakes-lbl",type:"symbol",source:"lakes",minzoom:6.5,filter:[">=",["get","a"],["step",["zoom"],1e9,6.5,20,7.5,5,9,0]],
+    layout:{"text-field":["get","n"],"text-font":["Open Sans Regular","Arial Unicode MS Regular"],"text-size":11,"text-letter-spacing":.05,"text-max-width":7},
+    paint:{"text-color":"#a9c8ee","text-halo-color":"#070f1b","text-halo-width":1.4}});
+  fetch("data/rivers.geojson").then(r=>{if(!r.ok) throw new Error("HTTP "+r.status+" for data/rivers.geojson"); return r.json();}).then(fc=>{
+    S.fc=fc; initRivers(fc);
+  }).catch(e=>{ $("stats").textContent="⚠ "+e.message; console.error(e); });
+}
+map.on("load",start);
+map.on("style.load",start);
+map.on("error",e=>console.warn("map error",e&&e.error&&e.error.message));
+
+function initRivers(fc){
+  // named index + reach store for the particle layer
+  const bb=new Map();
+  fc.features.forEach(f=>{
+    const n=f.properties.g||f.properties.n; if(!n) return;
+    let b=bb.get(n); if(!b){b=[1e9,1e9,-1e9,-1e9,0];bb.set(n,b);}
+    for(const [x,y] of f.geometry.coordinates){b[0]=Math.min(b[0],x);b[1]=Math.min(b[1],y);b[2]=Math.max(b[2],x);b[3]=Math.max(b[3],y);}
+    b[4]=Math.max(b[4],f.properties.u);
+  });
+  S.byName=bb;
+  buildReaches(fc);
+  map.addSource("rivers",{type:"geojson",data:fc,tolerance:.2});
+  map.addLayer({id:"riv-glow",type:"line",source:"rivers",layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":QCOLOR,"line-width":["interpolate",["linear"],["zoom"],5,["*",lineW,3],10,["*",lineW,5]],"line-opacity":.10,"line-blur":3}});
+  map.addLayer({id:"riv",type:"line",source:"rivers",layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":QCOLOR,"line-width":["interpolate",["linear"],["zoom"],5,["*",lineW,.9],8,["*",lineW,1.35],12,["*",lineW,2.4]],"line-opacity":.85}});
+  map.addLayer({id:"hl",type:"line",source:"rivers",filter:HLF("__none__"),layout:{"line-cap":"round"},
+    paint:{"line-color":"#ffd76a","line-width":["interpolate",["linear"],["zoom"],5,2.2,10,5],"line-opacity":.9}});
+  map.addLayer({id:"hit",type:"line",source:"rivers",paint:{"line-width":16,"line-opacity":.004,"line-color":"#000"}});
+  map.addLayer({id:"names",type:"symbol",source:"rivers",minzoom:6.2,filter:["has","n"],
+    layout:{"symbol-placement":"line","text-field":["get","n"],"text-font":["Open Sans Regular","Arial Unicode MS Regular"],
+      "text-size":["interpolate",["linear"],["zoom"],6,11,10,14],"symbol-spacing":420,"text-letter-spacing":.08,"text-max-angle":35,"text-padding":3},
+    paint:{"text-color":"#cfe9ff","text-halo-color":"#050b14","text-halo-width":1.6,"text-opacity":.95}});
+  applyFilters();
+  $("stats").innerHTML=`<b>${fc.features.length.toLocaleString("en")}</b> ${t("reaches")} · <span id="mode"></span>`;
+  loadFlow(); wireHover(); updateModeText(); startAnim();
+}
+
+/* ---------- flow.json (optional, daily modelled values) ---------- */
+function loadFlow(){
+  fetch("data/flow.json",{cache:"no-cache"}).then(r=>r.ok?r.json():null).then(j=>{
+    if(!j||!j.q) return;
+    S.live=j; let n=0;
+    S.fc.features.forEach(f=>{const v=j.q[f.properties.i]; if(v){f.properties.qn=v[0]; f.properties.r=v[1]; n++;}});
+    if(n){ map.getSource("rivers").setData(S.fc); const sw=$("sw-vs"); sw.disabled=false; updateModeText(); }
+  }).catch(()=>{});
+}
+function updateModeText(){
+  const m=$("mode"); if(m) m.textContent=S.live?`${t("mode_live")} · ${S.live.date}`:t("mode_avg");
+}
+
+/* ---------- particle layer ---------- */
+const cv=$("flow"), cx=cv.getContext("2d");
+let DPR=1,W=0,H=0;
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+"px";cv.style.height=H+"px";}
+addEventListener("resize",resize);resize();
+const mercX=lon=>(lon+180)/360;
+const mercY=lat=>.5-Math.log(Math.tan(Math.PI/4+lat*Math.PI/360))/(2*Math.PI);
+function buildReaches(fc){
+  S.reach=fc.features.map(f=>{
+    const c=f.geometry.coordinates,n=c.length,mx=new Float64Array(n),my=new Float64Array(n);
+    let x0=1,y0=1,x1=0,y1=0;
+    for(let i=0;i<n;i++){mx[i]=mercX(c[i][0]);my[i]=mercY(c[i][1]);
+      if(mx[i]<x0)x0=mx[i];if(mx[i]>x1)x1=mx[i];if(my[i]<y0)y0=my[i];if(my[i]>y1)y1=my[i];}
+    return {mx,my,n,x0,x1,y0,y1,q:f.properties.q,u:f.properties.u,f:f.properties};
+  });
+}
+let px=new Float64Array(4096),py=new Float64Array(4096),pl=new Float64Array(4096);
+function speedPx(q){ // px per second, gentle log growth
+  return (14+20*Math.log10(q+1))*S.speed;
+}
+let last=0,phase=0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  const dt=Math.min(.05,(ts-last)/1000||0);last=ts;
+  cx.setTransform(DPR,0,0,DPR,0,0); cx.clearRect(0,0,W,H);
+  if(!S.anim||!S.reach.length||S.speed===0&&false) return;
+  const z=map.getZoom(), ws=512*Math.pow(2,z), c=map.getCenter();
+  const cxm=mercX(c.lng), cym=mercY(c.lat);
+  const minUp=effMinUp();
+  const vx0=cxm-W/2/ws-.01, vx1=cxm+W/2/ws+.01, vy0=cym-H/2/ws-.01, vy1=cym+H/2/ws+.01;
+  S.t=(S.t||0)+dt; const T=S.t;
+  const dash=Math.max(5,Math.min(12,z*1.1)), lw=Math.max(.9,Math.min(2.4,(z-4)*.28));
+  cx.globalCompositeOperation="lighter"; cx.lineCap="round";
+  // batch by 3 brightness buckets
+  const buckets=[[],[],[]];
+  for(const r of S.reach){
+    if(r.u<minUp) continue;
+    if(r.x1<vx0||r.x0>vx1||r.y1<vy0||r.y0>vy1) continue;
+    const n=r.n; if(px.length<n){px=new Float64Array(n*2);py=new Float64Array(n*2);pl=new Float64Array(n*2);}
+    let L=0;
+    for(let i=0;i<n;i++){px[i]=(r.mx[i]-cxm)*ws+W/2;py[i]=(r.my[i]-cym)*ws+H/2;
+      pl[i]=i? L+=Math.hypot(px[i]-px[i-1],py[i]-py[i-1]) : 0;}
+    if(L<dash*1.5) continue;
+    const spacing=r.q>500?20:r.q>50?18:r.q>5?22:28;
+    const off=(T*speedPx(r.q))%spacing;
+    const b = r.q>200?2 : r.q>8?1 : 0;
+    let seg=0;
+    for(let d=off;d<L;d+=spacing){
+      const d2=Math.min(L,d+dash);
+      while(seg<n-2&&pl[seg+1]<d) seg++;
+      let s=seg; const arr=buckets[b];
+      let tt=(d-pl[s])/((pl[s+1]-pl[s])||1);
+      arr.push(px[s]+(px[s+1]-px[s])*tt,py[s]+(py[s+1]-py[s])*tt);
+      while(s<n-2&&pl[s+1]<d2){s++;arr.push(px[s],py[s]);}
+      let t2=(d2-pl[s])/((pl[s+1]-pl[s])||1);t2=Math.min(1,Math.max(0,t2));
+      arr.push(px[s]+(px[s+1]-px[s])*t2,py[s]+(py[s+1]-py[s])*t2,NaN,NaN);
+    }
+  }
+  const styles=[["rgba(120,190,255,.55)",lw],["rgba(170,225,255,.75)",lw*1.15],["rgba(235,248,255,.95)",lw*1.35]];
+  for(let b=0;b<3;b++){
+    const a=buckets[b]; if(!a.length) continue;
+    cx.beginPath(); let pen=false;
+    for(let i=0;i<a.length;i+=2){
+      if(a[i]!==a[i]){pen=false;continue;}
+      if(!pen){cx.moveTo(a[i],a[i+1]);pen=true;} else cx.lineTo(a[i],a[i+1]);
+    }
+    cx.strokeStyle=styles[b][0]; cx.lineWidth=styles[b][1]; cx.stroke();
+  }
+  cx.globalCompositeOperation="source-over";
+}
+function startAnim(){ if(!S.started){S.started=true;requestAnimationFrame(frame);} }
+
+/* ---------- hover tooltip ---------- */
+function fmtQ(q){return q>=100?Math.round(q).toLocaleString("en"):q>=10?q.toFixed(1):q>=1?q.toFixed(2):q.toFixed(3);}
+function wireHover(){
+  const tip=$("tip");
+  map.on("mousemove",e=>{
+    const p=e.point, fs=map.queryRenderedFeatures([[p.x-7,p.y-7],[p.x+7,p.y+7]],{layers:["hit"]});
+    if(!fs.length){
+      setHl(null); const lf=map.queryRenderedFeatures(p,{layers:["lakes-fill"]});
+      if(lf.length){ const q=lf[0].properties; map.getCanvas().style.cursor="pointer";
+        tip.innerHTML=`<div class="k">${t("lake")}</div><div class="n">${q.n}</div><div class="s">${t("area")}: <b>${(+q.a).toLocaleString("en",{maximumFractionDigits:1})} km²</b></div>`;
+        tip.style.display="block"; const tw=tip.offsetWidth, th=tip.offsetHeight;
+        tip.style.left=Math.min(innerWidth-tw-8,p.x+16)+"px"; tip.style.top=Math.max(8,Math.min(innerHeight-th-8,p.y+16))+"px"; return; }
+      tip.style.display="none";map.getCanvas().style.cursor="";return;}
+    fs.sort((a,b)=>b.properties.u-a.properties.u); const f=fs[0].properties;
+    map.getCanvas().style.cursor="pointer"; setHl(f.g||f.n||null);
+    let h=`<div class="k">${f.n?t("river"):t("reach")}</div><div class="n">${f.n||"—"}</div>`;
+    h+=`<div class="s">${fmtQ(f.q)} m³/s · ${t("avg")}</div>`;
+    if(f.qn!=null) h+=`<div class="s"><b>${fmtQ(f.qn)} m³/s</b> ${t("now")} (${Math.round(f.r*100)}% ${t("of")})</div>`;
+    h+=`<div class="s">${t("upl")}: <b>${Math.round(f.u).toLocaleString("en")} km²</b> · ${t("len")}: <b>${(+f.l).toFixed(1)} km</b></div>`;
+    tip.innerHTML=h; tip.style.display="block";
+    const tw=tip.offsetWidth, th=tip.offsetHeight;
+    tip.style.left=Math.min(innerWidth-tw-8,p.x+16)+"px"; tip.style.top=Math.max(8,Math.min(innerHeight-th-8,p.y+16))+"px";
+  });
+  map.on("mouseout",()=>{tip.style.display="none";setHl(null);});
+}
+function setHl(n){ if(S.hoverName===n) return; S.hoverName=n; map.setFilter("hl",HLF(n||"__none__")); }
+
+/* ---------- controls ---------- */
+function setSw(id,on){const b=$(id);b.classList.toggle("on",on);b.setAttribute("aria-checked",on);}
+function bindSw(id,key,fn){$(id).addEventListener("click",()=>{ if($(id).disabled) return; S[key]=!S[key]; setSw(id,S[key]); fn&&fn(S[key]); });}
+bindSw("sw-anim","anim");
+bindSw("sw-names","names",v=>map.getLayer("names")&&map.setLayoutProperty("names","visibility",v?"visible":"none"));
+bindSw("sw-relief","relief",v=>map.setLayoutProperty("relief","visibility",v?"visible":"none"));
+bindSw("sw-vs","vs",v=>{ map.setPaintProperty("riv","line-color",v?RCOLOR:QCOLOR); map.setPaintProperty("riv-glow","line-color",v?RCOLOR:QCOLOR); legend(); });
+$("speed").addEventListener("input",e=>{S.speed=+e.target.value;$("v-speed").textContent=S.speed.toFixed(1)+"×";});
+$("from").addEventListener("input",e=>{S.from=+e.target.value;$("v-from").textContent=FROM_LABEL()[S.from];applyFilters();});
+map.on("zoom",applyFilters);
+$("tog").addEventListener("click",()=>{const h=$("body").classList.toggle("hide");$("tog").textContent=h?"+":"−";$("tog").setAttribute("aria-expanded",!h);});
+
+function legend(){
+  if(S.vs){ $("t-leg").textContent=LANG==="ro"?"Debit față de media pe 30 zile":"Flow vs 30-day mean";
+    $("legbar").style.background="linear-gradient(90deg,#d24b3a,#e59a52,#a9b6c6,#5fb4ff,#2f6fff)";
+    document.querySelector(".tick").innerHTML=`<span>${LANG==="ro"?"uscat":"dry"}</span><span>${LANG==="ro"?"normal":"normal"}</span><span>${LANG==="ro"?"umed":"wet"}</span>`;
+  } else { $("t-leg").textContent=t("leg");
+    $("legbar").style.background="linear-gradient(90deg,#16407a,#2a6fd6,#43a4ff,#8fd3ff,#f2fbff)";
+    document.querySelector(".tick").innerHTML="<span>0.1</span><span>10</span><span>1 000</span><span>6 000+</span>";}
+}
+
+/* search */
+$("q").addEventListener("input",()=>{
+  const v=$("q").value.trim().toLowerCase(), box=$("res"); box.innerHTML="";
+  if(!v||!S.byName.size) return;
+  const norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+  const hits=[...S.byName.entries()].filter(([n])=>norm(n.split("#")[0]).includes(norm(v))).sort((a,b)=>b[1][4]-a[1][4]).slice(0,6);
+  if(!hits.length){box.innerHTML=`<span style="padding:6px 10px">${t("noresults")}</span>`;return;}
+  hits.forEach(([n,b])=>{const el=document.createElement("button");el.innerHTML=`${n.split("#")[0]}<span>${Math.round(b[4]).toLocaleString("en")} km²</span>`;
+    el.onclick=()=>{map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:{top:120,bottom:innerWidth<640?300:80,left:innerWidth<640?30:480,right:40},maxZoom:10,duration:1200});
+      setHl(n);box.innerHTML="";$("q").value=n.split("#")[0];
+      setTimeout(()=>setHl(null),2500);};
+    box.appendChild(el);});
+});
+
+/* language */
+function applyLang(){
+  const map_={ "t-kick":"kick","t-mc":"mc","t-explore":"explore","t-speed":"speed","t-from":"from","t-layers":"layers","t-anim":"anim","t-names":"names","t-relief":"relief","t-vs":"vs","t-search":"search","t-about":"about"};
+  for(const[id,k]of Object.entries(map_)) $(id).textContent=t(k);
+  $("q").placeholder=t("ph"); $("t-about-p").innerHTML=t("about_p");
+  $("v-from").textContent=FROM_LABEL()[S.from]; document.documentElement.lang=LANG;
+  $("l-en").classList.toggle("on",LANG==="en");$("l-ro").classList.toggle("on",LANG==="ro");
+  if(S.fc) { $("stats").innerHTML=`<b>${S.fc.features.length.toLocaleString("en")}</b> ${t("reaches")} · <span id="mode"></span>`; updateModeText(); }
+  legend();
+}
+$("l-en").onclick=()=>{LANG="en";applyLang();};$("l-ro").onclick=()=>{LANG="ro";applyLang();};
+applyLang();
+if(innerWidth<640){ $("body").classList.add("hide"); $("tog").textContent="+"; $("tog").setAttribute("aria-expanded","false"); }
+</script>
+</body>
+</html>
