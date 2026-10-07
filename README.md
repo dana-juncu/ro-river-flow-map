@@ -6,6 +6,8 @@ English and Romanian. It works on desktop and phone.
 
 **Live map:** https://dana-juncu.github.io/ro-river-flow-map/
 
+![River Flow Romania: animated river map in the dark, red-accent style](docs/preview.png)
+
 > Built with plain HTML/JS and [MapLibre GL JS](https://maplibre.org/). No build step, no API keys.
 
 ## What you can do
@@ -81,7 +83,7 @@ Only needed if you want to change the extent or refresh names. The scripts need 
 **Concept and inspiration:** Thomas Heggelund, creator of the river flow map series on [norway-charts.netlify.app](https://norway-charts.netlify.app/) ([USA](https://norway-charts.netlify.app/river_flow_map_usa/), [Norway](https://norway-charts.netlify.app/river_flow_map/), [Pakistan](https://norway-charts.netlify.app/river_flow_map_pakistan/)). This map applies the same idea to Romania; the code and data pipeline here were written independently.
 
 Data: HydroSHEDS (Lehner & Grill 2013), Copernicus/ECMWF GloFAS via Open-Meteo, OpenStreetMap contributors, Natural Earth, Mapzen/AWS.
-Map library: MapLibre GL JS (BSD-3-Clause). Built by Dana Juncu with the help of Claude.
+Map library: MapLibre GL JS (BSD-3-Clause). Fonts: Barlow and Barlow Condensed (SIL Open Font License) via Google Fonts. Built by Dana Juncu with the help of Claude.
 
 ## License
 
