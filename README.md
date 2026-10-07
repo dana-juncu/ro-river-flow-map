@@ -6,7 +6,7 @@ English and Romanian. It works on desktop and phone.
 
 **Live map:** https://dana-juncu.github.io/ro-river-flow-map/
 
-![River Flow Romania: animated river map in the dark, red-accent style](docs/preview.png)
+![River Flow Romania: animated river map in the dark, red-accent style](preview.png)
 
 > Built with plain HTML/JS and [MapLibre GL JS](https://maplibre.org/). No build step, no API keys.
 
